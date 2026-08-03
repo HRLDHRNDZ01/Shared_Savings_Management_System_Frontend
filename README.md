@@ -1,3 +1,15 @@
+# Shared Savings Management System (Frontend)
+
+## Description
+
+Frontend ng Shared Savings Management System (SSMS).  
+Web app para sa personal at shared savings spaces — login/register, dashboard, transactions, invites, notifications, at settings.
+
+*(Optional notes mo dito — e.g. school project, group members, status)*
+- Capstone / academic project
+- Requires running backend API
+- Still in development
+
 # .
 
 This template should help get you started developing with Vue 3 in Vite.
