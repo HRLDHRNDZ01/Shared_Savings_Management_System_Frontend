@@ -1,0 +1,15 @@
+@import './base.css';
+
+#app {
+  min-height: 100vh;
+  font-weight: normal;
+}
+
+a {
+  text-decoration: none;
+  transition: 0.2s;
+}
+
+body {
+  margin: 0;
+}
