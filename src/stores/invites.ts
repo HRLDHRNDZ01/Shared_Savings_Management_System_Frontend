@@ -2,6 +2,8 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import type { InviteStatus, SpaceInvite, SpaceMember, UserSearchResult } from '@/types'
 import { apiFetch } from '@/utils/api'
+import { connectEcho } from '@/utils/echo'
+import { useAuthStore } from '@/stores/auth'
 
 function mapInvite(raw: Record<string, unknown>): SpaceInvite {
   const space =
@@ -262,6 +264,54 @@ export const useInvitesStore = defineStore('invites', () => {
     userResults.value = []
   }
 
+  function upsertInvite(raw: Record<string, unknown>) {
+    const mapped = mapInvite(raw)
+    if (!mapped.id) return
+
+    const index = invites.value.findIndex((invite) => invite.id === mapped.id)
+    if (mapped.status !== 'pending') {
+      if (index >= 0) {
+        invites.value = invites.value.filter((invite) => invite.id !== mapped.id)
+      }
+      return
+    }
+
+    if (index >= 0) {
+      const next = [...invites.value]
+      next[index] = mapped
+      invites.value = next
+      return
+    }
+
+    invites.value = [mapped, ...invites.value]
+  }
+
+  function startRealtime() {
+    const auth = useAuthStore()
+    const userId = auth.user?.id
+    if (!userId) return
+
+    const echo = connectEcho()
+    if (!echo) return
+
+    echo
+      .private(`users.${userId}`)
+      .listen('.invitation.created', (payload: { invitation?: Record<string, unknown> }) => {
+        if (payload?.invitation) {
+          upsertInvite(payload.invitation)
+        }
+      })
+      .listen('.invitation.updated', (payload: { invitation?: Record<string, unknown> }) => {
+        if (payload?.invitation) {
+          upsertInvite(payload.invitation)
+        }
+      })
+  }
+
+  function stopRealtime() {
+    // Shared Echo connection is torn down by notifications.stopRealtime / disconnectEcho.
+  }
+
   function clear() {
     invites.value = []
     membersBySpace.value = {}
@@ -286,6 +336,8 @@ export const useInvitesStore = defineStore('invites', () => {
     acceptInvite,
     declineInvite,
     clearUserResults,
+    startRealtime,
+    stopRealtime,
     clear,
   }
 })
