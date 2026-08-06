@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
@@ -13,6 +13,24 @@ const rememberMe = ref(false)
 const isSubmitting = ref(false)
 const formError = ref('')
 const touched = ref({ email: false, password: false })
+const emailReadonly = ref(true)
+
+function resetLoginForm() {
+  const savedEmail = localStorage.getItem('ssms_remember_email')
+  email.value = savedEmail || ''
+  rememberMe.value = Boolean(savedEmail)
+  password.value = ''
+  formError.value = ''
+  touched.value = { email: false, password: false }
+}
+
+onMounted(() => {
+  resetLoginForm()
+  // Block browser autofill of the previous account after logout.
+  requestAnimationFrame(() => {
+    emailReadonly.value = false
+  })
+})
 
 const emailError = computed(() => {
   if (!touched.value.email) return ''
@@ -79,9 +97,13 @@ async function handleSubmit() {
     }
 
     auth.login({
+      id: user?.user_id ?? user?.id,
       email: user?.email || email.value.trim(),
       fullName: user?.name,
       phone: user?.contact_number || '',
+      role: user?.role,
+      groupId: user?.user_group_id ?? user?.user_group?.user_group_id,
+      groupName: user?.user_group?.name,
     })
     await router.push({ name: 'dashboard' })
   } catch {
@@ -91,11 +113,6 @@ async function handleSubmit() {
   }
 }
 
-const savedEmail = localStorage.getItem('ssms_remember_email')
-if (savedEmail) {
-  email.value = savedEmail
-  rememberMe.value = true
-}
 </script>
 
 <template>
@@ -119,7 +136,7 @@ if (savedEmail) {
           <p>Enter your email and password to access your dashboard.</p>
         </header>
 
-        <form class="login-form" novalidate @submit.prevent="handleSubmit">
+        <form class="login-form" autocomplete="off" novalidate @submit.prevent="handleSubmit">
           <p v-if="formError" class="login-form__alert" role="alert">{{ formError }}</p>
 
           <div class="field">
@@ -128,11 +145,13 @@ if (savedEmail) {
               id="login-email"
               v-model="email"
               type="email"
-              name="email"
-              autocomplete="email"
+              name="ssms-login-email"
+              autocomplete="off"
+              :readonly="emailReadonly"
               placeholder="you@example.com"
               :aria-invalid="Boolean(emailError)"
               :aria-describedby="emailError ? 'email-error' : undefined"
+              @focus="emailReadonly = false"
               @blur="touched.email = true"
             />
             <p v-if="emailError" id="email-error" class="field__error">{{ emailError }}</p>
@@ -145,8 +164,8 @@ if (savedEmail) {
                 id="login-password"
                 v-model="password"
                 :type="showPassword ? 'text' : 'password'"
-                name="password"
-                autocomplete="current-password"
+                name="ssms-login-password"
+                autocomplete="new-password"
                 placeholder="Enter your password"
                 :aria-invalid="Boolean(passwordError)"
                 :aria-describedby="passwordError ? 'password-error' : undefined"

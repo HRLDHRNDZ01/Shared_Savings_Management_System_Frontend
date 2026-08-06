@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useInvitesStore } from '@/stores/invites'
@@ -7,6 +7,7 @@ import { useNotificationsStore } from '@/stores/notifications'
 import { useSpacesStore } from '@/stores/spaces'
 import { useTransactionsStore } from '@/stores/transactions'
 import { useSettingsStore } from '@/stores/settings'
+import { useSidebarStore } from '@/stores/sidebar'
 
 const router = useRouter()
 const route = useRoute()
@@ -16,21 +17,14 @@ const spacesStore = useSpacesStore()
 const transactionsStore = useTransactionsStore()
 const settingsStore = useSettingsStore()
 const invitesStore = useInvitesStore()
+const sidebarStore = useSidebarStore()
 
 const isDesktop = ref(true)
 const sidebarOpen = ref(true)
 const menuOpen = ref(false)
 const notificationsOpen = ref(false)
 
-const navItems = [
-  { name: 'dashboard', label: 'Dashboard', icon: '🏠' },
-  { name: 'spaces', label: 'Savings Spaces', icon: '💰' },
-  { name: 'transactions', label: 'Transactions', icon: '📜' },
-  { name: 'notifications', label: 'Notifications', icon: '🔔' },
-  { name: 'reports', label: 'Reports', icon: '📊' },
-  { name: 'profile', label: 'Profile', icon: '👤' },
-  { name: 'settings', label: 'Settings', icon: '⚙' },
-]
+const navItems = computed(() => sidebarStore.navItems)
 
 function syncViewport() {
   const desktop = window.innerWidth > 860
@@ -64,11 +58,14 @@ function closeOverlays() {
 }
 
 function signOut() {
+  invitesStore.stopRealtime()
+  notificationsStore.stopRealtime()
   auth.logout()
   spacesStore.clear()
   transactionsStore.clear()
   notificationsStore.clear()
   invitesStore.clear()
+  sidebarStore.clear()
   settingsStore.reset()
   router.push({ name: 'login' })
 }
@@ -78,6 +75,13 @@ function onDocumentClick(event: MouseEvent) {
   if (!target.closest('.topbar__actions')) closeOverlays()
 }
 
+function onVisibilityChange() {
+  if (document.visibilityState === 'visible') {
+    void notificationsStore.fetchNotifications({ silent: true })
+    void invitesStore.fetchInvites()
+  }
+}
+
 watch(
   () => route.name,
   () => closeSidebarOnMobile(),
@@ -85,14 +89,27 @@ watch(
 
 onMounted(() => {
   syncViewport()
-  void notificationsStore.fetchNotifications()
+  void (async () => {
+    await auth.hydrateFromApi()
+    await Promise.all([
+      notificationsStore.fetchNotifications(),
+      invitesStore.fetchInvites(),
+      sidebarStore.fetchMySidebar(),
+    ])
+    notificationsStore.startRealtime()
+    invitesStore.startRealtime()
+  })()
   window.addEventListener('resize', syncViewport)
   document.addEventListener('click', onDocumentClick)
+  document.addEventListener('visibilitychange', onVisibilityChange)
 })
 
 onUnmounted(() => {
+  invitesStore.stopRealtime()
+  notificationsStore.stopRealtime()
   window.removeEventListener('resize', syncViewport)
   document.removeEventListener('click', onDocumentClick)
+  document.removeEventListener('visibilitychange', onVisibilityChange)
 })
 </script>
 

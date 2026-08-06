@@ -119,10 +119,13 @@ async function handleSubmit() {
     }
 
     auth.register({
+      id: user?.user_id ?? user?.id,
       fullName: user?.name || fullName.value.trim(),
       email: user?.email || email.value.trim(),
+      role: user?.role,
+      groupId: user?.user_group_id ?? user?.user_group?.user_group_id,
+      groupName: user?.user_group?.name,
     })
-    localStorage.setItem('ssms_remember_email', email.value.trim())
     await router.push({ name: 'dashboard' })
   } catch (error) {
     formError.value =

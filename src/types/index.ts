@@ -1,10 +1,32 @@
 export type SpaceType = 'Personal' | 'Shared'
 
 export interface UserProfile {
+  id: string
   fullName: string
   email: string
   phone: string
   memberSince: string
+  role: 'admin' | 'user'
+  groupId: string
+  groupName: string
+}
+
+export interface SidebarMenuItem {
+  id: string
+  key: string
+  label: string
+  icon: string
+  routeName: string
+  sortOrder: number
+}
+
+export interface UserGroup {
+  id: string
+  name: string
+  description: string
+  isActive: boolean
+  userCount: number
+  menuIds: string[]
 }
 
 export interface SavingsSpace {
