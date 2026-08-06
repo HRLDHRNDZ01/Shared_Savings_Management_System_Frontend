@@ -28,8 +28,9 @@ onMounted(async () => {
     return
   }
   await sidebarStore.fetchMaintenanceData()
-  if (sidebarStore.groups.length) {
-    selectGroup(sidebarStore.groups[0].id)
+  const firstGroup = sidebarStore.groups[0]
+  if (firstGroup) {
+    selectGroup(firstGroup.id)
   }
 })
 
@@ -73,8 +74,9 @@ async function createGroup() {
     newGroupName.value = ''
     newGroupDescription.value = ''
     message.value = 'User group created.'
-    if (sidebarStore.groups.length) {
-      selectGroup(sidebarStore.groups[sidebarStore.groups.length - 1].id)
+    const lastGroup = sidebarStore.groups[sidebarStore.groups.length - 1]
+    if (lastGroup) {
+      selectGroup(lastGroup.id)
     }
   } catch (error) {
     message.value = error instanceof Error ? error.message : 'Unable to create group.'
