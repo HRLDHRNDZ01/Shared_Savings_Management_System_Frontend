@@ -2,6 +2,7 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import type { SidebarMenuItem, UserGroup } from '@/types'
 import { apiFetch } from '@/utils/api'
+import { fullNameFromParts } from '@/utils/format'
 
 function mapMenu(raw: Record<string, unknown>): SidebarMenuItem {
   return {
@@ -99,7 +100,9 @@ export const useSidebarStore = defineStore('sidebar', () => {
               : null
           return {
             id: String(item.user_id ?? item.id ?? ''),
-            name: String(item.name ?? ''),
+            name:
+              String(item.name ?? '') ||
+              fullNameFromParts(String(item.first_name ?? ''), String(item.last_name ?? '')),
             email: String(item.email ?? ''),
             role: String(item.role ?? 'user'),
             groupId: String(item.user_group_id ?? group?.user_group_id ?? ''),

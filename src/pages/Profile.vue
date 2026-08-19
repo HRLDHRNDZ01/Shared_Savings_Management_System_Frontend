@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
+import { fullNameFromParts } from '@/utils/format'
 
 const auth = useAuthStore()
 
 const form = reactive({
-  fullName: auth.user?.fullName || '',
+  username: auth.user?.username || '',
+  firstName: auth.user?.firstName || '',
+  lastName: auth.user?.lastName || '',
   email: auth.user?.email || '',
   phone: auth.user?.phone || '',
 })
@@ -16,11 +19,29 @@ const formSuccess = ref('')
 watch(
   () => auth.user,
   (user) => {
-    form.fullName = user?.fullName || ''
+    form.username = user?.username || ''
+    form.firstName = user?.firstName || ''
+    form.lastName = user?.lastName || ''
     form.email = user?.email || ''
     form.phone = user?.phone || ''
   },
 )
+
+function applyProfileUser(user: Record<string, unknown>) {
+  auth.updateProfile({
+    username: String(user.username ?? form.username),
+    firstName: String(user.first_name ?? form.firstName),
+    lastName: String(user.last_name ?? form.lastName),
+    fullName: String(user.name ?? fullNameFromParts(form.firstName, form.lastName)),
+    email: String(user.email ?? form.email),
+    phone: String(user.contact_number ?? form.phone),
+  })
+  form.username = String(user.username ?? form.username)
+  form.firstName = String(user.first_name ?? form.firstName)
+  form.lastName = String(user.last_name ?? form.lastName)
+  form.email = String(user.email ?? form.email)
+  form.phone = String(user.contact_number ?? form.phone)
+}
 
 async function loadProfile() {
   const token = localStorage.getItem('ssms_token')
@@ -41,14 +62,7 @@ async function loadProfile() {
     const user = data?.data
     if (!user) return
 
-    auth.updateProfile({
-      fullName: user.name || '',
-      email: user.email || '',
-      phone: user.contact_number || '',
-    })
-    form.fullName = user.name || ''
-    form.email = user.email || ''
-    form.phone = user.contact_number || ''
+    applyProfileUser(user)
   } catch {
     // Keep local profile values if fetch fails.
   }
@@ -75,7 +89,8 @@ async function saveProfile() {
         Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({
-        name: form.fullName.trim(),
+        first_name: form.firstName.trim(),
+        last_name: form.lastName.trim(),
         email: form.email.trim(),
         contact_number: form.phone.trim(),
       }),
@@ -88,12 +103,17 @@ async function saveProfile() {
     }
 
     const user = data?.data
-    auth.updateProfile({
-      fullName: user?.name || form.fullName.trim(),
-      email: user?.email || form.email.trim(),
-      phone: user?.contact_number || form.phone.trim(),
-    })
-    form.phone = user?.contact_number || form.phone.trim()
+    if (user) {
+      applyProfileUser(user)
+    } else {
+      auth.updateProfile({
+        firstName: form.firstName.trim(),
+        lastName: form.lastName.trim(),
+        fullName: fullNameFromParts(form.firstName.trim(), form.lastName.trim()),
+        email: form.email.trim(),
+        phone: form.phone.trim(),
+      })
+    }
     formSuccess.value = data?.message || 'Profile updated successfully.'
   } catch (error) {
     formError.value =
@@ -127,6 +147,7 @@ onMounted(() => {
         <div class="avatar">{{ auth.initials }}</div>
         <div>
           <h2>{{ auth.displayName }}</h2>
+          <p v-if="auth.user?.username">@{{ auth.user.username }}</p>
           <p v-if="auth.user?.memberSince">Member since {{ auth.user.memberSince }}</p>
           <p v-else>Sign in to manage your profile.</p>
         </div>
@@ -137,9 +158,19 @@ onMounted(() => {
 
       <form class="form" @submit.prevent="saveProfile">
         <label>
-          Full name
-          <input v-model="form.fullName" type="text" autocomplete="name" />
+          Username
+          <input v-model="form.username" type="text" autocomplete="username" readonly />
         </label>
+        <div class="form-row">
+          <label>
+            First name
+            <input v-model="form.firstName" type="text" autocomplete="given-name" />
+          </label>
+          <label>
+            Last name
+            <input v-model="form.lastName" type="text" autocomplete="family-name" />
+          </label>
+        </div>
         <label>
           Email
           <input v-model="form.email" type="email" autocomplete="email" />
@@ -265,6 +296,17 @@ onMounted(() => {
   gap: 0.9rem;
 }
 
+.form-row {
+  display: grid;
+  gap: 0.9rem;
+}
+
+@media (min-width: 560px) {
+  .form-row {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
 .form label {
   display: grid;
   gap: 0.35rem;
@@ -284,6 +326,12 @@ onMounted(() => {
   outline: none;
   border-color: var(--ss-accent);
   box-shadow: 0 0 0 3px rgba(15, 122, 90, 0.14);
+}
+
+.form input[readonly] {
+  background: rgba(16, 35, 28, 0.04);
+  color: var(--ss-muted);
+  cursor: not-allowed;
 }
 
 @keyframes rise {

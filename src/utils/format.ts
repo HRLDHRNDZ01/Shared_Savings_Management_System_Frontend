@@ -24,3 +24,10 @@ export function firstName(name: string): string {
   const value = name.trim().split(/\s+/)[0]
   return value || 'there'
 }
+
+export function fullNameFromParts(first: string, last: string): string {
+  return [first, last]
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .join(' ')
+}

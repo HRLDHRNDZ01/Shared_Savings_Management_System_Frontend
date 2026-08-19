@@ -2,6 +2,9 @@ export type SpaceType = 'Personal' | 'Shared'
 
 export interface UserProfile {
   id: string
+  username: string
+  firstName: string
+  lastName: string
   fullName: string
   email: string
   phone: string
