@@ -6,7 +6,9 @@ import { useAuthStore } from '@/stores/auth'
 const router = useRouter()
 const auth = useAuthStore()
 
-const fullName = ref('')
+const username = ref('')
+const firstName = ref('')
+const lastName = ref('')
 const email = ref('')
 const password = ref('')
 const confirmPassword = ref('')
@@ -16,17 +18,34 @@ const acceptTerms = ref(false)
 const isSubmitting = ref(false)
 const formError = ref('')
 const touched = ref({
-  fullName: false,
+  username: false,
+  firstName: false,
+  lastName: false,
   email: false,
   password: false,
   confirmPassword: false,
   acceptTerms: false,
 })
 
-const fullNameError = computed(() => {
-  if (!touched.value.fullName) return ''
-  if (!fullName.value.trim()) return 'Full name is required.'
-  if (fullName.value.trim().length < 2) return 'Enter your full name.'
+const usernameError = computed(() => {
+  if (!touched.value.username) return ''
+  if (!username.value.trim()) return 'Username is required.'
+  if (username.value.trim().length < 3) return 'Username must be at least 3 characters.'
+  if (!/^[a-zA-Z0-9_-]+$/.test(username.value.trim())) {
+    return 'Username may only contain letters, numbers, dashes, and underscores.'
+  }
+  return ''
+})
+
+const firstNameError = computed(() => {
+  if (!touched.value.firstName) return ''
+  if (!firstName.value.trim()) return 'First name is required.'
+  return ''
+})
+
+const lastNameError = computed(() => {
+  if (!touched.value.lastName) return ''
+  if (!lastName.value.trim()) return 'Last name is required.'
   return ''
 })
 
@@ -61,7 +80,10 @@ const termsError = computed(() => {
 
 const isFormValid = computed(
   () =>
-    fullName.value.trim().length >= 2 &&
+    username.value.trim().length >= 3 &&
+    /^[a-zA-Z0-9_-]+$/.test(username.value.trim()) &&
+    Boolean(firstName.value.trim()) &&
+    Boolean(lastName.value.trim()) &&
     Boolean(email.value.trim()) &&
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.value.trim()) &&
     password.value.length >= 8 &&
@@ -71,7 +93,9 @@ const isFormValid = computed(
 
 async function handleSubmit() {
   touched.value = {
-    fullName: true,
+    username: true,
+    firstName: true,
+    lastName: true,
     email: true,
     password: true,
     confirmPassword: true,
@@ -84,8 +108,6 @@ async function handleSubmit() {
   isSubmitting.value = true
 
   try {
-    // Placeholder until the SaveSpace auth API is connected
-    //await new Promise((resolve) => setTimeout(resolve, 700))
     const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/auth/register`, {
       method: 'POST',
       headers: {
@@ -93,7 +115,9 @@ async function handleSubmit() {
         Accept: 'application/json',
       },
       body: JSON.stringify({
-        name: fullName.value.trim(),
+        username: username.value.trim(),
+        first_name: firstName.value.trim(),
+        last_name: lastName.value.trim(),
         email: email.value.trim(),
         password: password.value,
         password_confirmation: confirmPassword.value,
@@ -104,8 +128,10 @@ async function handleSubmit() {
       const errorBody = await response.json().catch(() => null)
       const apiMessage =
         errorBody?.message ||
+        errorBody?.errors?.username?.[0] ||
+        errorBody?.errors?.first_name?.[0] ||
+        errorBody?.errors?.last_name?.[0] ||
         errorBody?.errors?.email?.[0] ||
-        errorBody?.errors?.name?.[0] ||
         'Registration failed'
       throw new Error(apiMessage)
     }
@@ -118,14 +144,7 @@ async function handleSubmit() {
       localStorage.setItem('ssms_token', token)
     }
 
-    auth.register({
-      id: user?.user_id ?? user?.id,
-      fullName: user?.name || fullName.value.trim(),
-      email: user?.email || email.value.trim(),
-      role: user?.role,
-      groupId: user?.user_group_id ?? user?.user_group?.user_group_id,
-      groupName: user?.user_group?.name,
-    })
+    auth.register(user ?? {})
     await router.push({ name: 'dashboard' })
   } catch (error) {
     formError.value =
@@ -163,19 +182,57 @@ async function handleSubmit() {
           <p v-if="formError" class="register-form__alert" role="alert">{{ formError }}</p>
 
           <div class="field">
-            <label for="register-name">Full name</label>
+            <label for="register-username">Username</label>
             <input
-              id="register-name"
-              v-model="fullName"
+              id="register-username"
+              v-model="username"
               type="text"
-              name="fullName"
-              autocomplete="name"
-              placeholder="Jane Doe"
-              :aria-invalid="Boolean(fullNameError)"
-              :aria-describedby="fullNameError ? 'name-error' : undefined"
-              @blur="touched.fullName = true"
+              name="username"
+              autocomplete="username"
+              placeholder="your_username"
+              :aria-invalid="Boolean(usernameError)"
+              :aria-describedby="usernameError ? 'username-error' : undefined"
+              @blur="touched.username = true"
             />
-            <p v-if="fullNameError" id="name-error" class="field__error">{{ fullNameError }}</p>
+            <p v-if="usernameError" id="username-error" class="field__error">{{ usernameError }}</p>
+          </div>
+
+          <div class="field-row">
+            <div class="field">
+              <label for="register-first-name">First name</label>
+              <input
+                id="register-first-name"
+                v-model="firstName"
+                type="text"
+                name="firstName"
+                autocomplete="given-name"
+                placeholder="Jane"
+                :aria-invalid="Boolean(firstNameError)"
+                :aria-describedby="firstNameError ? 'first-name-error' : undefined"
+                @blur="touched.firstName = true"
+              />
+              <p v-if="firstNameError" id="first-name-error" class="field__error">
+                {{ firstNameError }}
+              </p>
+            </div>
+
+            <div class="field">
+              <label for="register-last-name">Last name</label>
+              <input
+                id="register-last-name"
+                v-model="lastName"
+                type="text"
+                name="lastName"
+                autocomplete="family-name"
+                placeholder="Doe"
+                :aria-invalid="Boolean(lastNameError)"
+                :aria-describedby="lastNameError ? 'last-name-error' : undefined"
+                @blur="touched.lastName = true"
+              />
+              <p v-if="lastNameError" id="last-name-error" class="field__error">
+                {{ lastNameError }}
+              </p>
+            </div>
           </div>
 
           <div class="field">
@@ -415,6 +472,17 @@ async function handleSubmit() {
   background: rgba(180, 35, 24, 0.08);
   color: var(--ss-danger);
   font-size: 0.9rem;
+}
+
+.field-row {
+  display: grid;
+  gap: 1rem;
+}
+
+@media (min-width: 560px) {
+  .field-row {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
 .field {

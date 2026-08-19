@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import type { UserProfile } from '@/types'
-import { getInitials } from '@/utils/format'
+import { fullNameFromParts, getInitials } from '@/utils/format'
 
 const AUTH_KEY = 'ssms_authenticated'
 const USER_KEY = 'ssms_user'
@@ -10,22 +10,60 @@ function normalizeRole(role: unknown): 'admin' | 'user' {
   return String(role ?? '').toLowerCase() === 'admin' ? 'admin' : 'user'
 }
 
+function splitLegacyFullName(fullName: string): { firstName: string; lastName: string } {
+  const parts = fullName.trim().split(/\s+/).filter(Boolean)
+  if (!parts.length) return { firstName: '', lastName: '' }
+  if (parts.length === 1) return { firstName: parts[0] ?? '', lastName: '' }
+  return {
+    firstName: parts[0] ?? '',
+    lastName: parts.slice(1).join(' '),
+  }
+}
+
+function mapApiUser(raw: Record<string, unknown>, fallback?: Partial<UserProfile>): UserProfile {
+  const email = String(raw.email ?? fallback?.email ?? '').trim()
+  const emailName = email.split('@')[0] || 'User'
+  const firstName = String(raw.first_name ?? fallback?.firstName ?? '').trim()
+  const lastName = String(raw.last_name ?? fallback?.lastName ?? '').trim()
+  const legacyFullName = String(raw.name ?? fallback?.fullName ?? '').trim()
+  const resolvedFirstName = firstName || splitLegacyFullName(legacyFullName).firstName
+  const resolvedLastName = lastName || splitLegacyFullName(legacyFullName).lastName
+  const fullName =
+    legacyFullName ||
+    fullNameFromParts(resolvedFirstName, resolvedLastName) ||
+    String(raw.username ?? fallback?.username ?? emailName)
+
+  return {
+    id: String(raw.user_id ?? raw.id ?? fallback?.id ?? ''),
+    username: String(raw.username ?? fallback?.username ?? emailName),
+    firstName: resolvedFirstName,
+    lastName: resolvedLastName,
+    fullName,
+    email,
+    phone: String(raw.contact_number ?? fallback?.phone ?? '').trim(),
+    memberSince:
+      fallback?.memberSince ||
+      new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' }),
+    role: normalizeRole(raw.role ?? fallback?.role),
+    groupId: String(
+      raw.user_group_id ??
+        (raw.user_group as Record<string, unknown> | undefined)?.user_group_id ??
+        fallback?.groupId ??
+        '',
+    ),
+    groupName: String(
+      (raw.user_group as Record<string, unknown> | undefined)?.name ?? fallback?.groupName ?? '',
+    ),
+  }
+}
+
 function readStoredUser(): UserProfile | null {
   const raw = sessionStorage.getItem(USER_KEY)
   if (!raw) return null
   try {
     const parsed = JSON.parse(raw) as Partial<UserProfile>
     if (!parsed.email) return null
-    return {
-      id: String(parsed.id ?? ''),
-      fullName: String(parsed.fullName ?? ''),
-      email: String(parsed.email ?? ''),
-      phone: String(parsed.phone ?? ''),
-      memberSince: String(parsed.memberSince ?? ''),
-      role: normalizeRole(parsed.role),
-      groupId: String(parsed.groupId ?? ''),
-      groupName: String(parsed.groupName ?? ''),
-    }
+    return mapApiUser({}, parsed)
   } catch {
     return null
   }
@@ -35,7 +73,13 @@ export const useAuthStore = defineStore('auth', () => {
   const user = ref<UserProfile | null>(readStoredUser())
   const isAuthenticated = ref(sessionStorage.getItem(AUTH_KEY) === 'true' && Boolean(user.value))
 
-  const displayName = computed(() => user.value?.fullName || 'User')
+  const displayName = computed(
+    () =>
+      fullNameFromParts(user.value?.firstName ?? '', user.value?.lastName ?? '') ||
+      user.value?.fullName ||
+      user.value?.username ||
+      'User',
+  )
   const initials = computed(() => getInitials(displayName.value))
   const isAdmin = computed(() => user.value?.role === 'admin')
 
@@ -47,60 +91,31 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  function applyUser(payload: {
-    id?: string | number
-    email: string
-    fullName?: string
-    phone?: string
-    role?: string
-    groupId?: string | number
-    groupName?: string
-  }) {
-    const emailName = payload.email.split('@')[0] || 'User'
-    user.value = {
-      id: String(payload.id ?? user.value?.id ?? ''),
-      fullName: payload.fullName?.trim() || emailName,
-      email: payload.email.trim(),
-      phone: payload.phone?.trim() || '',
-      memberSince:
-        user.value?.memberSince ||
-        new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' }),
-      role: normalizeRole(payload.role ?? user.value?.role),
-      groupId: String(payload.groupId ?? user.value?.groupId ?? ''),
-      groupName: String(payload.groupName ?? user.value?.groupName ?? ''),
-    }
+  function applyUser(payload: Record<string, unknown>) {
+    user.value = mapApiUser(payload, user.value ?? undefined)
     persist()
   }
 
-  function login(payload: {
-    id?: string | number
-    email: string
-    fullName?: string
-    phone?: string
-    role?: string
-    groupId?: string | number
-    groupName?: string
-  }) {
+  function login(payload: Record<string, unknown>) {
     applyUser(payload)
   }
 
-  function register(payload: {
-    id?: string | number
-    fullName: string
-    email: string
-    role?: string
-    groupId?: string | number
-    groupName?: string
-  }) {
-    applyUser({
-      ...payload,
-      phone: '',
-    })
+  function register(payload: Record<string, unknown>) {
+    applyUser({ ...payload, contact_number: payload.contact_number ?? '' })
   }
 
   function updateProfile(payload: Partial<UserProfile>) {
     if (!user.value) return
-    user.value = { ...user.value, ...payload }
+    user.value = {
+      ...user.value,
+      ...payload,
+      fullName:
+        payload.fullName ??
+        (fullNameFromParts(
+          payload.firstName ?? user.value.firstName,
+          payload.lastName ?? user.value.lastName,
+        ) || user.value.fullName),
+    }
     persist()
   }
 
@@ -110,6 +125,7 @@ export const useAuthStore = defineStore('auth', () => {
     sessionStorage.removeItem(AUTH_KEY)
     sessionStorage.removeItem(USER_KEY)
     localStorage.removeItem('ssms_token')
+    localStorage.removeItem('ssms_remember_username')
     localStorage.removeItem('ssms_remember_email')
   }
 
@@ -130,15 +146,7 @@ export const useAuthStore = defineStore('auth', () => {
       const apiUser = payload?.data
       if (!apiUser) return
 
-      applyUser({
-        id: apiUser.user_id ?? apiUser.id,
-        fullName: apiUser.name,
-        email: apiUser.email,
-        phone: apiUser.contact_number || '',
-        role: apiUser.role,
-        groupId: apiUser.user_group_id ?? apiUser.user_group?.user_group_id,
-        groupName: apiUser.user_group?.name,
-      })
+      applyUser(apiUser)
     } catch {
       // ignore hydrate failures; login flow still works
     }

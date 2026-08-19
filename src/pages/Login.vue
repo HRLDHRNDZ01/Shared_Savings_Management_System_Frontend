@@ -6,37 +6,40 @@ import { useAuthStore } from '@/stores/auth'
 const router = useRouter()
 const auth = useAuthStore()
 
-const email = ref('')
+const username = ref('')
 const password = ref('')
 const showPassword = ref(false)
 const rememberMe = ref(false)
 const isSubmitting = ref(false)
 const formError = ref('')
-const touched = ref({ email: false, password: false })
-const emailReadonly = ref(true)
+const touched = ref({ username: false, password: false })
+const usernameReadonly = ref(true)
 
 function resetLoginForm() {
-  const savedEmail = localStorage.getItem('ssms_remember_email')
-  email.value = savedEmail || ''
-  rememberMe.value = Boolean(savedEmail)
+  const savedUsername =
+    localStorage.getItem('ssms_remember_username') ||
+    localStorage.getItem('ssms_remember_email') ||
+    ''
+  username.value = savedUsername
+  rememberMe.value = Boolean(savedUsername)
   password.value = ''
   formError.value = ''
-  touched.value = { email: false, password: false }
+  touched.value = { username: false, password: false }
 }
 
 onMounted(() => {
   resetLoginForm()
-  // Block browser autofill of the previous account after logout.
   requestAnimationFrame(() => {
-    emailReadonly.value = false
+    usernameReadonly.value = false
   })
 })
 
-const emailError = computed(() => {
-  if (!touched.value.email) return ''
-  if (!email.value.trim()) return 'Email address is required.'
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.value.trim())) {
-    return 'Enter a valid email address.'
+const usernameError = computed(() => {
+  if (!touched.value.username) return ''
+  if (!username.value.trim()) return 'Username is required.'
+  if (username.value.trim().length < 3) return 'Username must be at least 3 characters.'
+  if (!/^[a-zA-Z0-9_-]+$/.test(username.value.trim())) {
+    return 'Username may only contain letters, numbers, dashes, and underscores.'
   }
   return ''
 })
@@ -50,13 +53,13 @@ const passwordError = computed(() => {
 
 const isFormValid = computed(
   () =>
-    Boolean(email.value.trim()) &&
-    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.value.trim()) &&
+    username.value.trim().length >= 3 &&
+    /^[a-zA-Z0-9_-]+$/.test(username.value.trim()) &&
     password.value.length >= 8,
 )
 
 async function handleSubmit() {
-  touched.value = { email: true, password: true }
+  touched.value = { username: true, password: true }
   formError.value = ''
 
   if (!isFormValid.value) return
@@ -64,8 +67,6 @@ async function handleSubmit() {
   isSubmitting.value = true
 
   try {
-    // Placeholder until the SaveSpace auth API is connected
-    //await new Promise((resolve) => setTimeout(resolve, 700))
     const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/auth/login`, {
       method: 'POST',
       headers: {
@@ -73,13 +74,14 @@ async function handleSubmit() {
         Accept: 'application/json',
       },
       body: JSON.stringify({
-        email: email.value.trim(),
+        username: username.value.trim(),
         password: password.value,
       }),
     })
 
     if (!response.ok) {
-      throw new Error('Login failed')
+      const errorBody = await response.json().catch(() => null)
+      throw new Error(errorBody?.message || 'Login failed')
     }
 
     const data = await response.json()
@@ -91,28 +93,23 @@ async function handleSubmit() {
     }
 
     if (rememberMe.value) {
-      localStorage.setItem('ssms_remember_email', email.value.trim())
+      localStorage.setItem('ssms_remember_username', username.value.trim())
     } else {
+      localStorage.removeItem('ssms_remember_username')
       localStorage.removeItem('ssms_remember_email')
     }
 
-    auth.login({
-      id: user?.user_id ?? user?.id,
-      email: user?.email || email.value.trim(),
-      fullName: user?.name,
-      phone: user?.contact_number || '',
-      role: user?.role,
-      groupId: user?.user_group_id ?? user?.user_group?.user_group_id,
-      groupName: user?.user_group?.name,
-    })
+    auth.login(user ?? { username: username.value.trim(), email: '' })
     await router.push({ name: 'dashboard' })
-  } catch {
-    formError.value = 'Unable to sign in. Please check your credentials and try again.'
+  } catch (error) {
+    formError.value =
+      error instanceof Error && error.message
+        ? error.message
+        : 'Unable to sign in. Please check your credentials and try again.'
   } finally {
     isSubmitting.value = false
   }
 }
-
 </script>
 
 <template>
@@ -133,28 +130,28 @@ async function handleSubmit() {
       <section class="login-panel" aria-labelledby="login-heading">
         <header class="login-panel__header">
           <h2 id="login-heading">Welcome back</h2>
-          <p>Enter your email and password to access your dashboard.</p>
+          <p>Enter your username and password to access your dashboard.</p>
         </header>
 
         <form class="login-form" autocomplete="off" novalidate @submit.prevent="handleSubmit">
           <p v-if="formError" class="login-form__alert" role="alert">{{ formError }}</p>
 
           <div class="field">
-            <label for="login-email">Email address</label>
+            <label for="login-username">Username</label>
             <input
-              id="login-email"
-              v-model="email"
-              type="email"
-              name="ssms-login-email"
-              autocomplete="off"
-              :readonly="emailReadonly"
-              placeholder="you@example.com"
-              :aria-invalid="Boolean(emailError)"
-              :aria-describedby="emailError ? 'email-error' : undefined"
-              @focus="emailReadonly = false"
-              @blur="touched.email = true"
+              id="login-username"
+              v-model="username"
+              type="text"
+              name="ssms-login-username"
+              autocomplete="username"
+              :readonly="usernameReadonly"
+              placeholder="your_username"
+              :aria-invalid="Boolean(usernameError)"
+              :aria-describedby="usernameError ? 'username-error' : undefined"
+              @focus="usernameReadonly = false"
+              @blur="touched.username = true"
             />
-            <p v-if="emailError" id="email-error" class="field__error">{{ emailError }}</p>
+            <p v-if="usernameError" id="username-error" class="field__error">{{ usernameError }}</p>
           </div>
 
           <div class="field">
@@ -165,7 +162,7 @@ async function handleSubmit() {
                 v-model="password"
                 :type="showPassword ? 'text' : 'password'"
                 name="ssms-login-password"
-                autocomplete="new-password"
+                autocomplete="current-password"
                 placeholder="Enter your password"
                 :aria-invalid="Boolean(passwordError)"
                 :aria-describedby="passwordError ? 'password-error' : undefined"
@@ -356,6 +353,7 @@ async function handleSubmit() {
   font-weight: 600;
 }
 
+.field input[type='text'],
 .field input[type='email'],
 .field__password input {
   width: 100%;
@@ -372,6 +370,7 @@ async function handleSubmit() {
     box-shadow 180ms ease;
 }
 
+.field input[type='text']:focus,
 .field input[type='email']:focus,
 .field__password input:focus {
   border-color: var(--ss-accent);
