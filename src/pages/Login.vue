@@ -145,7 +145,7 @@ async function handleSubmit() {
               name="ssms-login-username"
               autocomplete="username"
               :readonly="usernameReadonly"
-              placeholder="your_username"
+              placeholder="Enter you Username"
               :aria-invalid="Boolean(usernameError)"
               :aria-describedby="usernameError ? 'username-error' : undefined"
               @focus="usernameReadonly = false"
