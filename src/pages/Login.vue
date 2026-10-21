@@ -186,7 +186,7 @@ async function handleSubmit() {
               <input v-model="rememberMe" type="checkbox" name="remember" />
               <span>Remember me</span>
             </label>
-            <a class="forgot" href="#">Forgot password?</a>
+            <RouterLink class="forgot" :to="{ name: 'forgot-password' }">Forgot password?</RouterLink>
           </div>
 
           <button class="login-form__submit" type="submit" :disabled="isSubmitting">
