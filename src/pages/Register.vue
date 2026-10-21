@@ -189,7 +189,7 @@ async function handleSubmit() {
               type="text"
               name="username"
               autocomplete="username"
-              placeholder="your_username"
+              placeholder="Enter you Username"
               :aria-invalid="Boolean(usernameError)"
               :aria-describedby="usernameError ? 'username-error' : undefined"
               @blur="touched.username = true"
